@@ -36,3 +36,10 @@ jobs:
           name: A04E-KernelSU-Next-Image
           path: build/Image.gz
           if-no-files-found: error
+
+      - name: Upload A04E Device Tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: A04E-Device-Tree
+          path: build/mt6765_a04e_eur_open_00.dtb
+          if-no-files-found: error

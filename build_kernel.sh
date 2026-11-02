@@ -48,13 +48,17 @@ make -C "${RDIR}" O="${OUT}" \
     CLANG_TRIPLE=aarch64-linux-gnu- \
     KCFLAGS=-w \
     CONFIG_SECTION_MISMATCH_WARN_ONLY=y \
-    -j"$(nproc)" Image.gz
+    -j"$(nproc)" Image.gz dtbs
 
 echo "[6/6] Saving kernel artifact..."
 
 test -s "${OUT}/arch/arm64/boot/Image.gz"
 
 cp "${OUT}/arch/arm64/boot/Image.gz" "${BUILD}/Image.gz"
+DTB="${OUT}/arch/arm64/boot/dts/mediatek/mt6765_a04e_eur_open_00.dtb"
+test -s "${DTB}" || { echo "ERROR: A04e DTB was not generated"; exit 1; }
+cp "${DTB}" "${BUILD}/mt6765_a04e_eur_open_00.dtb"
+
 
 echo "Kernel build completed."
 ls -lh "${BUILD}/Image.gz"
