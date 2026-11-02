@@ -23,6 +23,13 @@ jobs:
           chmod +x build_kernel.sh
           bash build_kernel.sh
 
+      - name: Upload final kernel config
+        uses: actions/upload-artifact@v4
+        with:
+          name: A04E-final-config
+          path: out/.config
+          if-no-files-found: error
+
       - name: Upload Image.gz
         uses: actions/upload-artifact@v4
         with:
