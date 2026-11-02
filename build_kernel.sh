@@ -1,64 +1,59 @@
 #!/bin/bash
+set -euo pipefail
+
 export ARCH=arm64
 export RDIR="$(pwd)"
-export KBUILD_BUILD_USER="@ravindu644"
+export KBUILD_BUILD_USER="Ramesh"
+export KBUILD_BUILD_HOST="A04E"
 
-#init ksu next
-git submodule init && git submodule update
+OUT="${RDIR}/out"
+BUILD="${RDIR}/build"
 
-#export toolchain paths
-export BUILD_CROSS_COMPILE="${RDIR}/toolchains/arm-gnu-toolchain-14.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-"
-export BUILD_CC="${RDIR}/toolchains/clang-r383902/bin/clang"
+CROSS="${RDIR}/toolchains/arm-gnu-toolchain-14.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-"
+CLANG="${RDIR}/toolchains/clang-r383902/bin/clang"
 
-#output dir
-if [ ! -d "${RDIR}/out" ]; then
-    mkdir -p "${RDIR}/out"
-fi
+echo "[1/6] Checking toolchains..."
 
-#build dir
-if [ ! -d "${RDIR}/build" ]; then
-    mkdir -p "${RDIR}/build"
-else
-    rm -rf "${RDIR}/build" && mkdir -p "${RDIR}/build"
-fi
+test -x "${CLANG}" || { echo "ERROR: Clang not found"; exit 1; }
+test -x "${CROSS}gcc" || { echo "ERROR: GCC cross compiler not found"; exit 1; }
 
-#build options
-export ARGS="
--C $(pwd) \
-O=$(pwd)/out \
--j$(nproc) \
-ARCH=arm64 \
-CROSS_COMPILE=${BUILD_CROSS_COMPILE} \
-CC=${BUILD_CC} \
-CLANG_TRIPLE=aarch64-linux-gnu- \
-KCFLAGS=-w \
-CONFIG_SECTION_MISMATCH_WARN_ONLY=y \
-"
+echo "[2/6] Checking KernelSU-Next..."
 
-#build kernel image
-build_kernel(){
-    make ${ARGS} clean && make ${ARGS} mrproper
-    make ${ARGS} a04e_defconfig custom.config
-    make ${ARGS} menuconfig
-    make ${ARGS} || exit 1
-    cp out/arch/arm64/boot/Image.gz $(pwd)/arch/arm64/boot/Image.gz
-}
+git submodule update --init --recursive
+test -f drivers/kernelsu/Kconfig || { echo "ERROR: KernelSU source missing"; exit 1; }
 
-#build boot.img
-build_boot() {    
-    rm -f ${RDIR}/AIK-Linux/split_img/boot.img-kernel ${RDIR}/AIK-Linux/boot.img
-    cp "${RDIR}/out/arch/arm64/boot/Image.gz" ${RDIR}/AIK-Linux/split_img/boot.img-kernel
-    mkdir -p ${RDIR}/AIK-Linux/ramdisk/{debug_ramdisk,dev,metadata,mnt,proc,second_stage_resources,sys}
-    cd ${RDIR}/AIK-Linux && ./repackimg.sh --nosudo && mv image-new.img ${RDIR}/build/boot.img
-}
+echo "[3/6] Preparing output..."
 
-#build odin flashable tar
-build_tar(){
-    cd ${RDIR}/build
-    tar -cvf "KernelSU-Next-SM-A042F.tar" boot.img && rm boot.img
-    echo -e "\n[i] Build Finished..!\n" && cd ${RDIR}
-}
+rm -rf "${OUT}" "${BUILD}"
+mkdir -p "${OUT}" "${BUILD}"
 
-build_kernel
-build_boot
-build_tar
+echo "[4/6] Creating kernel configuration..."
+
+make -C "${RDIR}" O="${OUT}" ARCH=arm64 a04e_defconfig
+
+"${RDIR}/scripts/kconfig/merge_config.sh" \
+    -m -O "${OUT}" \
+    "${OUT}/.config" \
+    "${RDIR}/arch/arm64/configs/custom.config"
+
+make -C "${RDIR}" O="${OUT}" ARCH=arm64 olddefconfig
+
+echo "[5/6] Compiling kernel..."
+
+make -C "${RDIR}" O="${OUT}" \
+    ARCH=arm64 \
+    CROSS_COMPILE="${CROSS}" \
+    CC="${CLANG}" \
+    CLANG_TRIPLE=aarch64-linux-gnu- \
+    KCFLAGS=-w \
+    CONFIG_SECTION_MISMATCH_WARN_ONLY=y \
+    -j"$(nproc)" Image.gz
+
+echo "[6/6] Saving kernel artifact..."
+
+test -s "${OUT}/arch/arm64/boot/Image.gz"
+
+cp "${OUT}/arch/arm64/boot/Image.gz" "${BUILD}/Image.gz"
+
+echo "Kernel build completed."
+ls -lh "${BUILD}/Image.gz"
