@@ -37,6 +37,7 @@ make -C "${RDIR}" O="${OUT}" ARCH=arm64 a04e_defconfig
     "${RDIR}/arch/arm64/configs/custom.config"
 
 make -C "${RDIR}" O="${OUT}" ARCH=arm64 olddefconfig
+cp "${OUT}/.config" "${BUILD}/final.config"
 
 echo "[5/6] Compiling kernel..."
 

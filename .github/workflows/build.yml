@@ -27,7 +27,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: A04E-final-config
-          path: out/.config
+          path: build/final.config
           if-no-files-found: error
 
       - name: Upload Image.gz
