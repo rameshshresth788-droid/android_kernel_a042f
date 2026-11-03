@@ -1,45 +1,30 @@
-name: A04E KernelSU Next Build
+name: Kernel Compilation (stock config)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        submodules: recursive
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libncurses-dev python3 cpio rsync device-tree-compiler
+    - name: Set up build environment
+      run: |
+        sudo apt update -y
+        sudo apt install -y libncurses5-dev libtinfo5 bc bison flex libssl-dev cpio lz4 xz-utils
 
-      - name: Compile kernel
-        run: |
-          chmod +x build_kernel.sh
-          bash build_kernel.sh
+    - name: Compile Kernel
+      run: |
+        bash build_kernel.sh
 
-      - name: Upload final kernel config
-        uses: actions/upload-artifact@v4
-        with:
-          name: A04E-final-config
-          path: build/final.config
-          if-no-files-found: error
-
-      - name: Upload Image.gz
-        uses: actions/upload-artifact@v4
-        with:
-          name: A04E-KernelSU-Next-Image
-          path: build/Image.gz
-          if-no-files-found: error
-
-      - name: Upload A04E Device Tree
-        uses: actions/upload-artifact@v4
-        with:
-          name: A04E-Device-Tree
-          path: build/mt6765_a04e_eur_open_00.dtb
-          if-no-files-found: error
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: A04E-Kernel-Build
+        path: build/*
