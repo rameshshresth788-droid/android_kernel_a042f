@@ -1,64 +1,53 @@
 #!/bin/bash
-set -euo pipefail
-
+# SM-A042F (A042FXXSCEYG2) - stock config + KernelSU-Next, for GitHub Actions
+set -e
 export ARCH=arm64
 export RDIR="$(pwd)"
-export KBUILD_BUILD_USER="Ramesh"
-export KBUILD_BUILD_HOST="A04E"
+export KBUILD_BUILD_USER="build"
+export KBUILD_BUILD_HOST="a04e"
 
-OUT="${RDIR}/out"
-BUILD="${RDIR}/build"
+git submodule update --init --recursive || true
 
-CROSS="${RDIR}/toolchains/arm-gnu-toolchain-14.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-"
-CLANG="${RDIR}/toolchains/clang-r383902/bin/clang"
+export BUILD_CROSS_COMPILE="${RDIR}/toolchains/arm-gnu-toolchain-14.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-"
+export BUILD_CC="${RDIR}/toolchains/clang-r383902/bin/clang"
 
-echo "[1/6] Checking toolchains..."
+if [ ! -x "${BUILD_CC}" ]; then
+    echo "ERROR: clang not found at ${BUILD_CC}"; ls -la "${RDIR}/toolchains" || true; exit 1
+fi
+if [ ! -f "${RDIR}/arch/arm64/configs/a04e_stock_ksu_defconfig" ]; then
+    echo "ERROR: arch/arm64/configs/a04e_stock_ksu_defconfig missing"; exit 1
+fi
 
-test -x "${CLANG}" || { echo "ERROR: Clang not found"; exit 1; }
-test -x "${CROSS}gcc" || { echo "ERROR: GCC cross compiler not found"; exit 1; }
+rm -rf "${RDIR}/out" "${RDIR}/build"
+mkdir -p "${RDIR}/out" "${RDIR}/build"
 
-echo "[2/6] Checking KernelSU-Next..."
+export ARGS="
+-C ${RDIR} \
+O=${RDIR}/out \
+-j$(nproc) \
+ARCH=arm64 \
+CROSS_COMPILE=${BUILD_CROSS_COMPILE} \
+CC=${BUILD_CC} \
+CLANG_TRIPLE=aarch64-linux-gnu- \
+KCFLAGS=-w \
+CONFIG_SECTION_MISMATCH_WARN_ONLY=y \
+"
 
-git submodule update --init --recursive
-test -f drivers/kernelsu/Kconfig || { echo "ERROR: KernelSU source missing"; exit 1; }
+make ${ARGS} mrproper
 
-echo "[3/6] Preparing output..."
+# stock kernel release string so vendor modules' vermagic matches
+printf '%s' "-28581296-abA042FXXSCEYG2" > "${RDIR}/.scmversion"
 
-rm -rf "${OUT}" "${BUILD}"
-mkdir -p "${OUT}" "${BUILD}"
+make ${ARGS} a04e_stock_ksu_defconfig
+make ${ARGS} olddefconfig
 
-echo "[4/6] Creating kernel configuration..."
+echo "---- config check ----"
+grep -E "^CONFIG_(LOCALVERSION|SECURITY_DEFEX|KPROBES|KSU|MODULES|MODVERSIONS)" out/.config || true
+make ${ARGS} -s kernelrelease | tee build/kernelrelease.txt
 
-make -C "${RDIR}" O="${OUT}" ARCH=arm64 a04e_defconfig
+make ${ARGS}
 
-"${RDIR}/scripts/kconfig/merge_config.sh" \
-    -m -O "${OUT}" \
-    "${OUT}/.config" \
-    "${RDIR}/arch/arm64/configs/custom.config"
-
-make -C "${RDIR}" O="${OUT}" ARCH=arm64 olddefconfig
-cp "${OUT}/.config" "${BUILD}/final.config"
-
-echo "[5/6] Compiling kernel..."
-
-make -C "${RDIR}" O="${OUT}" \
-    ARCH=arm64 \
-    CROSS_COMPILE="${CROSS}" \
-    CC="${CLANG}" \
-    CLANG_TRIPLE=aarch64-linux-gnu- \
-    KCFLAGS=-w \
-    CONFIG_SECTION_MISMATCH_WARN_ONLY=y \
-    -j"$(nproc)" Image.gz dtbs
-
-echo "[6/6] Saving kernel artifact..."
-
-test -s "${OUT}/arch/arm64/boot/Image.gz"
-
-cp "${OUT}/arch/arm64/boot/Image.gz" "${BUILD}/Image.gz"
-DTB="${OUT}/arch/arm64/boot/dts/mediatek/mt6765_a04e_eur_open_00.dtb"
-test -s "${DTB}" || { echo "ERROR: A04e DTB was not generated"; exit 1; }
-cp "${DTB}" "${BUILD}/mt6765_a04e_eur_open_00.dtb"
-
-
-echo "Kernel build completed."
-ls -lh "${BUILD}/Image.gz"
+cp out/arch/arm64/boot/Image.gz build/Image.gz
+cp out/.config build/final.config
+cp out/Module.symvers build/Module.symvers || true
+echo "[i] Build finished"
